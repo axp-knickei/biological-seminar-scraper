@@ -178,7 +178,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👤 Contact
 
 **Alex Prima**
-- GitHub: [@axp-knickei](https://github.com/yourusername)
+- GitHub: [@axp-knickei](https://github.com/axp-knickei)
 - Email: alexprima@gmail.com
 
 ## 🙏 Acknowledgments
