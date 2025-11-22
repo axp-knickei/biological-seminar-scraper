@@ -15,6 +15,7 @@ A Python web scraper designed to collect information about biological seminars a
 - [Project Structure](#project-structure)
 - [Output](#output)
 - [Configuration](#configuration)
+- [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
 - [Contact](#contact)
@@ -27,6 +28,8 @@ A Python web scraper designed to collect information about biological seminars a
 - **Anti-Bot Detection**: Randomized headers and delays to avoid being blocked
 - **Structured Output**: Exports data to CSV format with organized columns
 - **Session Management**: Built-in retry mechanism for handling failed requests
+- **Command-Line Interface**: Flexible CLI for specifying URLs and output files.
+- **Test Suite**: Includes unit and integration tests to ensure reliability.
 
 ## 🔧 Prerequisites
 
@@ -64,85 +67,77 @@ pip install -r requirements.txt
 
 ## 🚀 Usage
 
-Run the scraper using the following command:
+Run the scraper using the `main.py` script with the following command-line arguments:
 
 ```bash
-python 251014-Social1-v1.0.6.py
+python3 main.py --urls <URL1> <URL2> ... --output <FILENAME>.csv
+```
+
+- `--urls`: (Required) One or more URLs to scrape.
+- `--output`: (Optional) The name of the output CSV file. Defaults to `biological_seminars.csv`.
+
+### Example
+
+```bash
+python3 main.py --urls https://example.com/seminars http://anothersite.org/events --output my_seminars.csv
 ```
 
 The scraper will:
-1. Connect to target websites
-2. Extract seminar and conference information
-3. Parse dates and filter for 2025-2026 events
-4. Export results to a CSV file
-
-### Example Output
-
-The scraper collects the following information:
-- **Name**: Conference/seminar title
-- **City_Country**: Location of the event
-- **Conference_Dates**: Event dates
-- **Abstract_Submission_Deadline**: Deadline for abstract submissions
-- **Key_Topic_Description**: Main topics and themes
-- **Organizer**: Organization or institution hosting the event
-- **Link**: URL to the event page
+1. Connect to the target websites.
+2. Extract seminar and conference information.
+3. Parse dates and filter for events in the configured years.
+4. Export the results to the specified CSV file.
 
 ## 📁 Project Structure
 
 ```
 biological-seminar-scraper/
-├── 251014-Social1-v1.0.6.py    # Main scraper script
-├── requirements.txt              # Python dependencies
-├── README.md                     # Project documentation
-├── .gitignore                    # Git ignore file
-└── output/                       # Directory for output files (created automatically)
+├── main.py                     # Main entry point for the scraper
+├── seminar_scraper.py          # Contains the SeminarScraper class and core logic
+├── config.py                   # Configuration file for settings
+├── requirements.txt            # Python dependencies
+├── tests/                      # Test suite for the scraper
+│   ├── test_date_parsing.py    # Unit tests for date parsing
+│   └── test_scraper.py         # Integration tests for the scraper
+├── test_data/                  # Dummy data for testing
+│   └── dummy_seminars.html     # Sample HTML file for testing
+├── output/                     # Directory for output files (created automatically)
+├── venv/                       # Python virtual environment (if created)
+├── README.md                   # Project documentation
+└── .gitignore                  # Git ignore file
 ```
 
 ## 📊 Output
 
 The scraper generates a CSV file with the following columns:
 
-| Column | Description |
-|--------|-------------|
-| Name | Conference/seminar name |
-| City_Country | Location (city and country) |
-| Conference_Dates | Event dates |
-| Abstract_Submission_Deadline | Deadline for submissions |
-| Key_Topic_Description | Main topics covered |
-| Organizer | Hosting organization |
-| Link | Event website URL |
+| Column                       | Description                                 |
+| ---------------------------- | ------------------------------------------- |
+| Name                         | Conference/seminar name                     |
+| City_Country                 | Location (city and country)                 |
+| Conference_Dates             | Event dates (YYYY-MM-DD)                    |
+| Abstract_Submission_Deadline | Deadline for submissions (YYYY-MM-DD)       |
+| Key_Topic_Description        | Main topics covered                         |
+| Organizer                    | Hosting organization                        |
+| Link                         | Event website URL                           |
 
 ## ⚙️ Configuration
 
-### Customizing Headers
+The scraper's behavior can be configured by editing the `config.py` file:
 
-The scraper uses randomized User-Agent strings to avoid detection. You can add more user agents in the `get_headers()` function:
+- **`USER_AGENTS`**: A list of User-Agent strings to rotate through for requests.
+- **`RETRY_TOTAL`**, **`RETRY_BACKOFF_FACTOR`**, etc.: Parameters for the request retry strategy.
+- **`TARGET_YEARS`**: A list of years to filter for when parsing dates (e.g., `[2025, 2026]`).
+- **`OUTPUT_DIR`**: The directory where output CSV files will be saved.
+- **`COLUMNS`**: The list of column names for the output CSV.
+- **`BASE_URLS`**: (Legacy) A placeholder for base URLs. It is recommended to use the `--urls` command-line argument instead.
 
-```python
-user_agents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
-    # Add your custom user agents here
-]
-```
+## 🧪 Testing
 
-### Adjusting Retry Strategy
+The project includes a test suite to ensure reliability. To run the tests, execute the following command from the project root directory:
 
-Modify the retry parameters in `create_session_with_retries()`:
-
-```python
-retry_strategy = Retry(
-    total=3,                    # Number of retries
-    backoff_factor=1,           # Delay between retries
-    status_forcelist=[429, 500, 502, 503, 504]  # HTTP status codes to retry
-)
-```
-
-### Date Range Filtering
-
-The scraper currently filters for 2025-2026 events. To change this, modify the `target_years` list in `parse_date_improved()`:
-
-```python
-target_years = [2025, 2026]  # Add or remove years as needed
+```bash
+python3 -m unittest discover tests
 ```
 
 ## 🤝 Contributing
@@ -166,10 +161,10 @@ Contributions are welcome! Here's how you can help:
 
 ### Development Guidelines
 
-- Follow PEP 8 style guidelines for Python code
-- Add docstrings to all functions
-- Update tests if you add new functionality
-- Update the README.md if you change functionality
+- Follow PEP 8 style guidelines for Python code.
+- Add docstrings to all functions and classes.
+- Update tests if you add new functionality.
+- Update the README.md if you change functionality.
 
 ## 📄 License
 
@@ -183,18 +178,25 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- Thanks to the Beautiful Soup community for the excellent HTML parsing library
-- Inspired by the need for automated conference tracking in biological sciences
+- Thanks to the Beautiful Soup community for the excellent HTML parsing library.
+- Inspired by the need for automated conference tracking in biological sciences.
 
 ## ⚠️ Disclaimer
 
 This tool is for educational and research purposes only. Always:
-- Check the website's `robots.txt` before scraping
-- Respect the website's terms of service
-- Implement appropriate delays between requests
-- Consider using official APIs when available
+- Check the website's `robots.txt` before scraping.
+- Respect the website's terms of service.
+- Implement appropriate delays between requests.
+- Consider using official APIs when available.
 
 ## 📝 Changelog
+
+### Version 1.1.0 (Refactor and Test)
+- **Refactored to Object-Oriented Structure**: Moved core logic into a `SeminarScraper` class in `seminar_scraper.py`.
+- **Added Configuration File**: Centralized settings into `config.py`.
+- **Implemented Command-Line Interface**: Added `argparse` in `main.py` to accept URLs and an output file.
+- **Added Test Suite**: Created unit and integration tests using `unittest` to ensure scraper reliability.
+- **Bug Fixes**: Corrected date parsing logic and various other bugs.
 
 ### Version 1.0.6
 - Enhanced date parsing with 2025-2026 filtering
