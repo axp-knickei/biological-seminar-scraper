@@ -24,8 +24,8 @@ def main():
     args = parser.parse_args()
 
     logger.info(f"Starting seminar scraper for URLs: {args.urls}")
-    scraper = SeminarScraper()
-    scraper.run(base_urls=args.urls, filename=args.output)
+    with SeminarScraper() as scraper:
+        scraper.run(base_urls=args.urls, filename=args.output)
     logger.info("Scraping process completed.")
 
 if __name__ == "__main__":

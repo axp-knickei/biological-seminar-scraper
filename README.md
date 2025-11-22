@@ -16,6 +16,7 @@ A Python web scraper designed to collect information about biological seminars a
 - [Output](#output)
 - [Configuration](#configuration)
 - [Testing](#testing)
+- [Current Challenges](#current-challenges)
 - [Contributing](#contributing)
 - [License](#license)
 - [Contact](#contact)
@@ -24,10 +25,10 @@ A Python web scraper designed to collect information about biological seminars a
 
 - **Automated Data Collection**: Scrapes conference and seminar information from biological science websites
 - **Robust Error Handling**: Implements retry strategies and logging for reliable data collection
+- **Dynamic Content Handling**: Uses Selenium to render JavaScript-heavy websites.
 - **Smart Date Parsing**: Enhanced date parsing with filtering for 2025-2026 events
 - **Anti-Bot Detection**: Randomized headers and delays to avoid being blocked
 - **Structured Output**: Exports data to CSV format with organized columns
-- **Session Management**: Built-in retry mechanism for handling failed requests
 - **Command-Line Interface**: Flexible CLI for specifying URLs and output files.
 - **Test Suite**: Includes unit and integration tests to ensure reliability.
 
@@ -37,6 +38,8 @@ Before running this scraper, ensure you have the following installed:
 
 - Python 3.8 or higher
 - pip (Python package manager)
+- Google Chrome (or another browser compatible with Selenium)
+- The necessary system dependencies for your webdriver (see "Current Challenges" for details).
 
 ## 📦 Installation
 
@@ -140,6 +143,31 @@ The project includes a test suite to ensure reliability. To run the tests, execu
 python3 -m unittest discover tests
 ```
 
+## 🚨 Current Challenges
+
+### Advanced Bot Detection on `allconferencealert.net`
+
+We are currently facing challenges scraping `https://allconferencealert.net/`. The website appears to use advanced bot detection mechanisms that are preventing our `selenium`-based scraper from accessing the conference data.
+
+**What we've tried:**
+
+- Using `selenium` with a headless Chrome browser to render dynamic JavaScript content.
+- Implementing explicit waits to ensure the page has time to load.
+- Disabling the `navigator.webdriver` flag and other common `selenium` automation flags to appear more like a normal browser.
+
+Despite these efforts, the scraper is still being blocked, and the conference listings are not being loaded.
+
+**How you can help:**
+
+We are looking for contributors to help us bypass this bot detection. Some potential avenues to explore include:
+
+- **More advanced anti-detection libraries:** Investigating libraries like `undetected-chromedriver` which are specifically designed to be more stealthy.
+- **Proxy services:** Using a rotating proxy service to avoid IP-based blocking.
+- **Network analysis:** Manually inspecting the website's network traffic in a real browser's developer tools to see if there's a direct API call we can use to fetch the data, which would be more reliable than scraping the HTML.
+- **Alternative scraping libraries:** Exploring other scraping libraries or frameworks that might be better suited for this kind of challenge.
+
+If you have experience with advanced web scraping and bot detection, we would greatly appreciate your contributions!
+
 ## 🤝 Contributing
 
 Contributions are welcome! Here's how you can help:
@@ -178,7 +206,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- Thanks to the Beautiful Soup community for the excellent HTML parsing library.
+- Thanks to the Beautiful Soup and Selenium communities for their excellent libraries.
 - Inspired by the need for automated conference tracking in biological sciences.
 
 ## ⚠️ Disclaimer
@@ -190,6 +218,11 @@ This tool is for educational and research purposes only. Always:
 - Consider using official APIs when available.
 
 ## 📝 Changelog
+
+### Version 1.2.0 (Selenium Integration and Debugging)
+- **Added Selenium**: Integrated `selenium` to handle dynamically loaded content.
+- **Bot Detection Attempts**: Added measures to prevent `selenium` detection.
+- **Documented Challenges**: Added a "Current Challenges" section to the README to document issues with scraping `allconferencealert.net`.
 
 ### Version 1.1.0 (Refactor and Test)
 - **Refactored to Object-Oriented Structure**: Moved core logic into a `SeminarScraper` class in `seminar_scraper.py`.

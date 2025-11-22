@@ -12,6 +12,11 @@ import random
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import os
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 import config
 
@@ -19,48 +24,50 @@ logger = logging.getLogger(__name__)
 
 class SeminarScraper:
     def __init__(self):
-        self.session = self._create_session_with_retries()
+        self.driver = self._init_driver()
         self.output_dir = config.OUTPUT_DIR
-        self.columns = config.COLUMNS # Assuming COLUMNS will be moved to config
+        self.columns = config.COLUMNS
 
-    def _create_session_with_retries(self):
-        """Create a request session with automatic retry strategy."""
-        session = requests.Session()
-        retry_strategy = Retry(
-            total=config.RETRY_TOTAL,
-            backoff_factor=config.RETRY_BACKOFF_FACTOR,
-            status_forcelist=config.RETRY_STATUS_FORCELIST,
-            allowed_methods=config.RETRY_ALLOWED_METHODS
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        return session
+    def _init_driver(self):
+        """
+        Initializes a headless Chrome webdriver with anti-detection measures.
+        """
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        # The following options are added to make the Selenium-controlled browser
+        # appear more like a normal browser and avoid bot detection.
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        driver = webdriver.Chrome(options=chrome_options)
+        return driver
 
-    def _get_headers(self):
-        """Return randomized headers to avoid bot detection."""
-        return {
-            'User-Agent': random.choice(config.USER_AGENTS),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US, en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Cache-Control': 'max-age=0'
-        }
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.driver.quit()
 
     def fetch_page(self, url):
-        """Fetches a web page with randomized headers and retry mechanism."""
+        """Fetches a web page using Selenium to handle dynamic content."""
         try:
-            response = self.session.get(url, headers=self._get_headers(), timeout=10)
-            response.raise_for_status()
-            time.sleep(random.uniform(1, 3)) # Introduce a random delay
-            return response.text
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching {url}: {e}")
+            self.driver.get(url)
+            # Use an explicit wait to allow time for dynamic content to load.
+            # This waits up to 10 seconds for an element with the class 'front-item-box'
+            # to appear on the page.
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "front-item-box"))
+            )
+            return self.driver.page_source
+        except Exception as e:
+            logger.error(f"Error fetching {url} with Selenium: {e}")
+            # If an error occurs (e.g., a timeout), save the page source for debugging.
+            with open("page_source_on_error.html", "w", encoding="utf-8") as f:
+                f.write(self.driver.page_source)
             return None
 
     def parse_date_improved(self, date_str):
@@ -68,15 +75,12 @@ class SeminarScraper:
         if not date_str or 'Not known' in str(date_str) or not isinstance(date_str, str):
             return 'Not known'
         
-        # Clean the date string - remove extra characters including commas
         date_str = re.sub(r'[^\w\s\-\/.]', '', date_str).strip()
         
-        # Current year for context
         current_year = datetime.now().year
         target_years = config.TARGET_YEARS
     
         try:
-            # Look for explicit years first with a more flexible approach
             year = None
             for y in target_years:
                 if str(y) in date_str:
@@ -86,56 +90,40 @@ class SeminarScraper:
             if year is None:
                 return 'Not known'
         
-            # Attempt to parse date with various formats
             parsed_date = None
             date_formats = [
-                "%d %b %Y", "%d %B %Y", "%b %d %Y", "%B %d %Y", # No commas in formats
+                "%d %b %Y", "%d %B %Y", "%b %d %Y", "%B %d %Y",
                 "%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d",
                 "%d %b", "%b %d", "%d.%m.", "%d.%m.%Y"
             ]
         
-            # Add year to string if not explicitly present for formats that need it
             date_str_for_parsing = date_str
-            # If the date_str doesn't contain a full year, but we've identified one, append it
-            if not any(str(y) in date_str for y in range(current_year - 5, current_year + 5)) and year: # crude check if year is missing
+            if not any(str(y) in date_str for y in range(current_year - 5, current_year + 5)) and year:
                 date_str_for_parsing = f"{date_str} {year}"
         
             for fmt in date_formats:
                 try:
                     parsed_date = datetime.strptime(date_str_for_parsing, fmt)
-                    # Check if the parsed year matches the identified year or is within target years
-                    if parsed_date.year == year or parsed_date.year in target_years:
+                    if parsed_date.year in target_years:
                         break
-                    else: # If parsed year doesn't match, it might be a different year, so continue
+                    else:
                         parsed_date = None
                 except ValueError:
-                    # If format with year failed, try formats without explicit year (e.g., "Oct 15")
-                    try:
-                        temp_date = datetime.strptime(date_str, fmt)
-                        if temp_date.year == 1900: # Default year for strptime if not specified
-                            temp_date = temp_date.replace(year=year) # Use the identified year
-                        if temp_date.year == year or temp_date.year in target_years:
-                            parsed_date = temp_date
-                            break
-                    except ValueError:
-                        continue
-            if parsed_date:
-                # Final check if the parsed date is within the target years
-                if parsed_date.year in target_years:
-                    return parsed_date.strftime('%Y-%m-%d')
-                else:
-                    return 'Not known' # Date is not in target years
-            else:
-                # If still not parsed, a final attempt with year inference for month/day only strings
-                for fmt in date_formats:
                     try:
                         temp_date = datetime.strptime(date_str, fmt)
                         if temp_date.year == 1900:
                             temp_date = temp_date.replace(year=year)
                         if temp_date.year in target_years:
-                            return temp_date.strftime('%Y-%m-%d')
+                            parsed_date = temp_date
+                            break
                     except ValueError:
                         continue
+            if parsed_date:
+                if parsed_date.year in target_years:
+                    return parsed_date.strftime('%Y-%m-%d')
+                else:
+                    return 'Not known'
+            else:
                 return 'Not known'
 
         except Exception as e:
@@ -143,57 +131,55 @@ class SeminarScraper:
             return 'Not known'
 
     def parse_seminar_data(self, html_content, base_url):
-        """Parses the HTML content to extract seminar data."""
+        """
+        Parses the HTML content to extract seminar data.
+        
+        NOTE: This method is highly dependent on the HTML structure of the target
+        website. The current implementation is tailored for allconferencealert.net.
+        If you are scraping a different website, you will need to inspect its
+        HTML and modify the selectors accordingly.
+        
+        CURRENT CHALLENGE: As of the last test, allconferencealert.net is
+        successfully detecting and blocking our scraper, even with Selenium and
+        anti-detection measures. This results in the 'front-item-box' elements
+        not being loaded. More advanced techniques are likely needed to bypass
+        this. See the "Current Challenges" section in README.md for more details.
+        """
         soup = BeautifulSoup(html_content, 'lxml')
         seminars = []
-        
-        # Find the main container for seminar listings
-        seminar_list_container = soup.find('div', id='seminar-list')
-        if not seminar_list_container:
-            logger.warning("Could not find the seminar list container on the page.")
-            return seminars
 
-        # Iterate through each seminar item
-        for item in seminar_list_container.find_all('div', class_='seminar-item'):
+        listings = soup.find_all('div', class_='front-item-box')
+        logger.info(f"Found {len(listings)} conference listings.")
+
+        for item in listings:
             try:
-                # Extracting seminar name and link
-                name_element = item.find('h2', class_='seminar-title')
+                name_element = item.find('h2')
                 name = name_element.text.strip() if name_element else 'Not found'
                 
                 link_element = name_element.find('a') if name_element else None
                 link = urljoin(base_url, link_element['href']) if link_element else 'Not found'
 
-                # Extracting city and country
-                location_element = item.find('span', class_='seminar-location')
-                city_country = location_element.text.strip() if location_element else 'Not found'
-
-                # Extracting conference dates
-                date_element = item.find('span', class_='seminar-date')
-                conference_dates = self.parse_date_improved(date_element.text.strip()) if date_element else 'Not known'
+                details = item.find_all('span')
                 
-                # Extracting abstract submission deadline
-                details_container = item.find('div', class_='seminar-details')
-                abstract_deadline_text = 'Not known'
-                if details_container:
-                    # Find span containing "Abstract Deadline"
-                    for span in details_container.find_all('span'):
-                        if 'Abstract Deadline' in span.text:
-                            abstract_deadline_text = span.text.replace('Abstract Deadline:', '').strip()
-                            break
-                abstract_deadline = self.parse_date_improved(abstract_deadline_text)
+                conference_dates_str = 'Not known'
+                city_country = 'Not found'
+                organizer = 'Not found'
+                key_topic_description = 'Not found'
+                
+                for detail in details:
+                    text = detail.text.strip()
+                    if "Conference Date" in text:
+                        conference_dates_str = text.replace('Conference Date', '').strip()
+                    elif "Venue" in text:
+                        city_country = text.replace('Venue', '').strip()
+                    elif "Organizer" in text:
+                        organizer = text.replace('Organizer', '').strip()
+                    elif "Event Type" in text:
+                        key_topic_description = text.replace('Event Type', '').strip()
 
-                # Extracting key topic description
-                description_element = item.find('p', class_='seminar-description')
-                key_topic_description = description_element.text.strip() if description_element else 'Not found'
-
-                # Extracting organizer
-                organizer_text = 'Not found'
-                if details_container:
-                     for span in details_container.find_all('span'):
-                        if 'Organizer' in span.text:
-                            organizer_text = span.text.replace('Organizer:', '').strip()
-                            break
-                organizer = organizer_text
+                conference_dates = self.parse_date_improved(conference_dates_str)
+                
+                abstract_deadline = 'Not known'
 
                 seminars.append({
                     'Name': name,
@@ -211,7 +197,6 @@ class SeminarScraper:
         return seminars
 
     def save_data(self, data, filename="biological_seminars.csv"):
-        """Saves the scraped data to a CSV file."""
         if not data:
             logger.info("No data to save.")
             return
@@ -223,7 +208,6 @@ class SeminarScraper:
         logger.info(f"Data saved to {output_file}")
 
     def run(self, base_urls, filename="biological_seminars.csv"):
-        """Orchestrates the scraping process."""
         all_seminars = []
         if not base_urls:
             logger.warning("No URLs provided to scrape.")
